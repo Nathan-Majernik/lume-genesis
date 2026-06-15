@@ -29,8 +29,9 @@ class Undulator(types.BeamlineElement):
         undulator rms and peak values are identical.
     lambdau : float, default=0.0
         Undulator period length in meter. Default is 0 m.
-    nwig : int, default=0
-        Number of periods.
+    nwig : float, default=0.0
+        Number of periods. It should be an integer but Genesis allows also a value of
+        0.5 to resolve half-periods.
     helical : bool, default=False
         Boolean flag whether the undulator is planar or helical. A planar undulator has
         helical=`false`. Note that setting it to `true`, does not change the roll-off
@@ -65,9 +66,12 @@ class Undulator(types.BeamlineElement):
         default=0.0,
         description="Undulator period length in meter. Default is 0 m.",
     )
-    nwig: int = pydantic.Field(
-        default=0,
-        description="Number of periods.",
+    nwig: float = pydantic.Field(
+        default=0.0,
+        description=(
+            "Number of periods. It should be an integer but Genesis allows also a value "
+            "of 0.5 to resolve half-periods."
+        ),
     )
     helical: bool = pydantic.Field(
         default=False,

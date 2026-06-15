@@ -29,6 +29,7 @@ The following describes all supported namelist with their variables, including i
   - [beam](#beam)
   - [alter_beam](#alter_beam)
   - [field](#field)
+  - [alter_field](#alter_field)
   - [importdistribution](#importdistribution)
   - [importbeam](#importbeam)
   - [importfield](#importfield)
@@ -100,6 +101,7 @@ A namelist to change some parameters within the simulation, which have been defi
 ### lattice
 
 This namelist is used to change the raw lattice from the lattice file, such as generating errors in the position of the elements. The namelist can be defined several times to add more than one error source to the lattice.
+It handles also the generation of undulator errors both the variation in the undulator field as well as resulting orbit wander, resulting from imperfectly shimmed undulator field. The model is only exact for planar undulator and integration step of half the undulator period.
 
 - `zmatch` (*double, 0*): If the position within the undulator in meter is non-zero than Genesis tries to calculate the matched optics function for a periodic solution. In the case that it cannot find a solution than it will report it. Found solution will also be the default values for a succeeding beam generation, so that no explicit optical functions need to be defined any longer. If the lattice is highly non-periodic it is recommended
     to find the matching condition with an external program such as MAdX.
@@ -109,6 +111,12 @@ This namelist is used to change the raw lattice from the lattice file, such as g
 - `instance` (*integer, 0*): The instances of affected elements. If a positive value is given, than only that element is changed, where its occurence matches the number. E.g. for a value of 3 only the third element is selected. For a value of 0 all elements are changed. The ability to change more than one but less than all is currently not supported.
 - `add` (*bool, true*): If the value is `true`, the changes are added to the existing value. For a value of `false`, the old values are overwritten.
 - `resolvePeriod` (*bool, false*): currently unused.
+- `fielderror` (*double, 0*): the relative rms fluctuation of the undulator field
+- `orbiterror` (*bool, false*): if set to true Genesis applies kicks to the orbit, base don the change in the K-values per integration set.
+It is recommended to set integration setsize to half the undulator period but the algorithm works also for larger integration step. Also the kick is only correct for
+planar undulator configuration by kicking only in the x-plane. For helical the kick is also generated but in reality it would be a kick in both planes. The kick error tries to set the first and second field integral to zero, meaning that the
+error does not introduce a net offset or angle per undulator module.
+- `seed` (*int, 1234567*): Seed for the random number generator for the field errors.
 
 [Back](#supported-namelists)
 
@@ -177,13 +185,13 @@ Reading look-up tables from an HDF5 file.
 
 A wrapper around `profile_file`.
 
-- `file`(*string, \<empty>*): Name of the HDF5 file, which contains all the dataset
+- `file` (*string, \<empty>*): Name of the HDF5 file, which contains all the dataset
 - `xdata` (*string, \<empty>*): Points to a dataset in an HDF5 file to define the `s`-position for the look-up table. The format is `group1/.../groupn/datasetname`, where the naming of groups is not required if the dataset is at root level of the HDF file
 - `ydata` (*string, \<empty>*): A comma separated list of multiple dataset names. The individual format is the same as `xdata` but for the function values of the look-up table.
-- `label_prefix` (*string,\<empty>*): The labels are generated with this prefix, a comma and the individual name of the dataset, given in `ydata`
+- `label_prefix` (*string,\<empty>*): The labels are generated with this prefix, a period and the individual name of the dataset, given in `ydata`
 - `isTime` (*bool, false*): If true the `s`-position is a time variable and therefore multiplied with the speed of light `c` to get the position in meters.
-- `reverse`(*bool, false*): if true the order in the look-up table is reverse. This is sometimes needed because time and spatial coordinates differ sometimes by a minus sign.
-
+- `reverse` (*bool, false*): if true the order in the look-up table is reverse. This is sometimes needed because time and spatial coordinates differ sometimes by a minus sign.
+- `autoassign` (*bool, false*): if true the code gathers all dataset in the specified and defines a profile for each with the laben given by the dataset name or - in case `label_prefix` is defined - to concatenation of `label_prefix`, a period and the datasetname
 
 [Back](#supported-namelists)
 
@@ -294,6 +302,18 @@ This namelist initiate the generation of the field distribution. It differs in o
 - `nx` (*int, 0*): Mode number in $x$ of the Gauss-Hermite mode
 - `ny` (*int, 0*): Mode number in $y$ of the Gauss-Hermite mode
 - `accumulate` (*bool, false*): If set the generated field is added to an existing field instead of overwriting it.
+
+[Back](#supported-namelists)
+
+### alter_field
+This applies some transformation of the radiation field. This includes scaling the radiation power and to apply a spiral phase plate (SPP)
+
+- `harm` (*int, 1*): Harmonic to select the corresponding radiation field for the transformation.
+- `scale_power` (*double, 1.0*): Scales the radiation power to the whole field.
+- `spp_phi0` (*double, 0*): Global phase shift to the radiation field.
+- `spp_l` (*double, 0*): Angular momentum of SPP adding a phase proportional angular momentum * azimuthal angle of the transverse plane
+- `spp_nsect` (*int, 0*):  Model of a discrete SPP with `spp_nsect`  sections.
+
 
 [Back](#supported-namelists)
 
@@ -469,6 +489,7 @@ It allows also to chose the type of field solver. The default behaviour is the a
 The fft methods allows also to filter the source term to exclude unphysical strongly divergent modes, which can bounce of the grid edge, resulting in model pattern of the wavefront. However a very agressive filtering can also
 affect the actual FEL process. It is recommended to not use it unless you are very familiar with the code and its affect.
 - `zstop` (*double, 1e9*): If `zstop` is shorter than the lattice length the tracking stops at the specified position.
+- `periodic` (*bool, false*): If set to true, Genesis uses a periodic boundary condition of the time-window. Any radiation which slips out of the window is pushed back into it from the other side
 - `output_step` (*int, 1*): Defines the number of integration steps before the particle and field distribution is analyzed for output.
 - `field_dump_step` (*int, 0*): Defines the number of integration steps before a field dump is written. Be careful because for time-dependent simulation it can generate many large output files.
 - `beam_dump_step` (*int, 0*): Defines the number of integration steps before a particle dump is written. Be careful because for time-dependent simulation it can generate many large output files.

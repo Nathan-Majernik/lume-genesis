@@ -490,6 +490,10 @@ class LatticeNamelist(types.NameList):
     This namelist is used to change the raw lattice from the lattice file, such as
     generating errors in the position of the elements. The namelist can be defined
     several times to add more than one error source to the lattice.
+    It handles also the generation of undulator errors both the variation in the
+    undulator field as well as resulting orbit wander, resulting from imperfectly
+    shimmed undulator field. The model is only exact for planar undulator and
+    integration step of half the undulator period.
 
     LatticeNamelist corresponds to Genesis 4 namelist `lattice`.
 
@@ -528,6 +532,13 @@ class LatticeNamelist(types.NameList):
         value of `false`, the old values are overwritten.
     resolvePeriod : bool, default=False
         currently unused.
+    fielderror : float, default=0.0
+        the relative rms fluctuation of the undulator field
+    orbiterror : bool, default=False
+        if set to true Genesis applies kicks to the orbit, base don the change in the
+        K-values per integration set.
+    seed : int, default=1234567
+        Seed for the random number generator for the field errors.
     """
 
     type: Literal["lattice"] = "lattice"
@@ -589,6 +600,21 @@ class LatticeNamelist(types.NameList):
     resolvePeriod: bool = pydantic.Field(
         default=False,
         description="currently unused.",
+    )
+    fielderror: float = pydantic.Field(
+        default=0.0,
+        description="the relative rms fluctuation of the undulator field",
+    )
+    orbiterror: bool = pydantic.Field(
+        default=False,
+        description=(
+            "if set to true Genesis applies kicks to the orbit, base don the change in "
+            "the K-values per integration set."
+        ),
+    )
+    seed: int = pydantic.Field(
+        default=1234567,
+        description="Seed for the random number generator for the field errors.",
     )
 
 
@@ -1430,6 +1456,52 @@ class Field(types.NameList):
     )
 
 
+class AlterField(types.NameList):
+    r"""
+    Field manipulator (TODO).
+
+    Note that the namelist `field_manipulator` is deprecated and will be removed in
+    the future. Use `alter_field` instead.
+
+    AlterField corresponds to Genesis 4 namelist `alter_field`.
+
+    Attributes
+    ----------
+    harm : int, default=1
+        harmonic
+    scale_power : float, default=1.0
+        power scaling factor
+    spp_l : float, default=0.0
+        TODO
+    spp_nsect : int, default=0
+        TODO
+    spp_phi0 : float, default=0.0
+        TODO
+    """
+
+    type: Literal["alter_field"] = "alter_field"
+    harm: int = pydantic.Field(
+        default=1,
+        description="harmonic",
+    )
+    scale_power: float = pydantic.Field(
+        default=1.0,
+        description="power scaling factor",
+    )
+    spp_l: float = pydantic.Field(
+        default=0.0,
+        description="TODO",
+    )
+    spp_nsect: int = pydantic.Field(
+        default=0,
+        description="TODO",
+    )
+    spp_phi0: float = pydantic.Field(
+        default=0.0,
+        description="TODO",
+    )
+
+
 class ImportDistribution(types.NameList):
     r"""
     This namelist controls the import of an external distribution which are
@@ -2146,6 +2218,10 @@ class Track(types.NameList):
     zstop : float, default=1000000000.0
         If `zstop` is shorter than the lattice length the tracking stops at the
         specified position.
+    periodic : bool, default=False
+        If set to true, Genesis uses a periodic boundary condition of the time-window.
+        Any radiation which slips out of the window is pushed back into it from the
+        other side
     output_step : int, default=1
         Defines the number of integration steps before the particle and field
         distribution is analyzed for output.
@@ -2198,6 +2274,14 @@ class Track(types.NameList):
         description=(
             "If `zstop` is shorter than the lattice length the tracking stops at the "
             "specified position."
+        ),
+    )
+    periodic: bool = pydantic.Field(
+        default=False,
+        description=(
+            "If set to true, Genesis uses a periodic boundary condition of the time- "
+            "window. Any radiation which slips out of the window is pushed back into it "
+            "from the other side"
         ),
     )
     output_step: int = pydantic.Field(
@@ -2293,52 +2377,6 @@ class Track(types.NameList):
     )
 
 
-class AlterField(types.NameList):
-    r"""
-    Field manipulator (TODO).
-
-    Note that the namelist `field_manipulator` is deprecated and will be removed in
-    the future. Use `alter_field` instead.
-
-    AlterField corresponds to Genesis 4 namelist `alter_field`.
-
-    Attributes
-    ----------
-    harm : int, default=1
-        harmonic
-    scale_power : float, default=1.0
-        power scaling factor
-    spp_l : float, default=0.0
-        TODO
-    spp_nsect : int, default=0
-        TODO
-    spp_phi0 : float, default=0.0
-        TODO
-    """
-
-    type: Literal["alter_field"] = "alter_field"
-    harm: int = pydantic.Field(
-        default=1,
-        description="harmonic",
-    )
-    scale_power: float = pydantic.Field(
-        default=1.0,
-        description="power scaling factor",
-    )
-    spp_l: float = pydantic.Field(
-        default=0.0,
-        description="TODO",
-    )
-    spp_nsect: int = pydantic.Field(
-        default=0,
-        description="TODO",
-    )
-    spp_phi0: float = pydantic.Field(
-        default=0.0,
-        description="TODO",
-    )
-
-
 class SequenceList(types.NameList):
     r"""
     A sequence of values given as a string.
@@ -2411,6 +2449,7 @@ AutogeneratedNameList = Union[
     Beam,
     AlterBeam,
     Field,
+    AlterField,
     ImportDistribution,
     ImportBeam,
     ImportField,
@@ -2420,7 +2459,6 @@ AutogeneratedNameList = Union[
     Wake,
     Write,
     Track,
-    AlterField,
     SequenceList,
     SequenceFilelist,
 ]
