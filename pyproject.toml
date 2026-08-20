@@ -45,7 +45,7 @@ doc = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/slaclab/lume-genesis"
+Homepage = "https://github.com/lume-science/lume-genesis"
 
 [tool.setuptools.packages.find]
 where = ["."]

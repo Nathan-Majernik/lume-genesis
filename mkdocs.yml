@@ -1,6 +1,6 @@
 site_name: LUME-Genesis
-repo_url: https://github.com/slaclab/lume-genesis
-repo_name: slaclab/lume-genesis
+repo_url: https://github.com/lume-science/lume-genesis
+repo_name: lume-science/lume-genesis
 
 nav:
   - Home: index.md
@@ -78,7 +78,7 @@ extra:
   generator: false
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/slaclab/lume-genesis
+      link: https://github.com/lume-science/lume-genesis
       name: LUME-Genesis
 
 extra_css:
@@ -123,7 +123,7 @@ plugins:
             import:
               - https://docs.python.org/3/objects.inv
               - https://docs.h5py.org/en/stable/objects.inv
-              - https://slaclab.github.io/lume-base/objects.inv
+              - https://lume-science.github.io/lume-base/objects.inv
               - https://lark-parser.readthedocs.io/en/latest/objects.inv
           rendering:
             show_source: true

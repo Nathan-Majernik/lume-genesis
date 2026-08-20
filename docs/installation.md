@@ -26,7 +26,7 @@ conda search lume-genesis --channel conda-forge
 ---
 ## Installing Genesis 1.3 version 2 Executables
 
-See: [slaclab/Genesis-1.3-Version2 Installation](https://github.com/slaclab/Genesis-1.3-Version2#precompiled)
+See: [lume-science/Genesis-1.3-Version2 Installation](https://github.com/lume-science/Genesis-1.3-Version2#precompiled)
 
 conda-forge provides normal and MPI variants of Genesis2 for Linux and MacOS:
 
@@ -108,7 +108,7 @@ This should build the  `genesis` binary.
 
 Clone this repository:
 ```shell
-git clone https://github.com/slaclab/lume-genesis.git
+git clone https://github.com/lume-science/lume-genesis.git
 ```
 
 Create an environment `genesis-dev` with all the dependencies:
