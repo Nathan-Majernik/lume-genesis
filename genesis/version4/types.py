@@ -201,7 +201,12 @@ class _PydanticParticleGroup:
         if isinstance(value, ParticleGroup):
             return value
         if isinstance(value, dict):
-            return cls._from_dict(value)
+            try:
+                return cls._from_dict(value)
+            except Exception as ex:
+                # Translate any exceptions to pydantic-accepted ValueError for validation;
+                # this will play more nicely in unions.
+                raise ValueError(f"ParticleGroup from dict failed: {ex!r}") from ex
         raise ValueError(f"No conversion from {value!r} to ParticleGroup")  # type: ignore[unreachable]
 
 
@@ -246,7 +251,10 @@ class _PydanticPmdUnit:
         if isinstance(value, pmd_unit):
             return value
         if isinstance(value, dict):
-            return cls._from_dict(value)
+            try:
+                return cls._from_dict(value)
+            except Exception as ex:
+                raise ValueError(f"pmd_unit from dict failed: {ex!r}") from ex
         raise ValueError(f"No conversion from {value!r} to pmd_unit")
 
 
