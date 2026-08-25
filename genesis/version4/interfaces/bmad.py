@@ -95,6 +95,130 @@ def quadrupole_and_corrector_steps(quad: Quadrupole, cx=0, cy=0, num_steps=1):
     return eles
 
 
+def _cartesian_map_terms(tao, ele_id, ix_map: int = 1, which: str = "model"):
+    """
+    Returns the terms of a Bmad cartesian_map as a list of dicts.
+
+    This bypasses `tao.ele_cartesian_map(..., 'terms')`, whose output parser
+    cannot handle the mixed numeric/string rows.
+
+    Each term dict has keys:
+        coef, kx, ky, kz, x0, y0, phi_z, family, form
+
+    `family` is one of 'x', 'y', 'qu', 'sq' and `form` is one of
+    'hyper_y', 'hyper_xy', 'hyper_x' (lowercased).
+    """
+    lines = tao.cmd(f"pipe ele:cartesian_map {ele_id}|{which} {ix_map} terms")
+    terms = []
+    for line in lines:
+        p = line.split(";")
+        terms.append(
+            {
+                "coef": float(p[1]),
+                "kx": float(p[2]),
+                "ky": float(p[3]),
+                "kz": float(p[4]),
+                "x0": float(p[5]),
+                "y0": float(p[6]),
+                "phi_z": float(p[7]),
+                "family": p[8].strip().lower(),
+                "form": p[9].strip().lower(),
+            }
+        )
+    return terms
+
+
+def undulator_field_params_from_cartesian_map(tao, ele_id, label, lambdau):
+    """
+    Extracts the on-axis peak field and the Genesis4 `kx`, `ky` roll-off
+    parameters from a Bmad `cartesian_map` field.
+
+    Conventions
+    -----------
+    Bmad writes a single ``family = y`` Cartesian map term as (Bmad manual,
+    "Cartesian Map Field", with :math:`\\theta = k_z z + \\phi_z`)
+
+    ``hyper_y`` (:math:`k_y^2 = k_x^2 + k_z^2`)::
+
+        B_y = A cos(kx x) cosh(ky y) cos(theta)
+
+    ``hyper_xy`` (:math:`k_z^2 = k_x^2 + k_y^2`)::
+
+        B_y = A (ky/kz) cosh(kx x) cosh(ky y) cos(theta)
+
+    ``hyper_x`` (:math:`k_x^2 = k_y^2 + k_z^2`)::
+
+        B_y = A (ky/kx) cosh(kx x) cos(ky y) cos(theta)
+
+    Genesis4 writes the same field as an expansion whose quadratic
+    coefficients are normalized to :math:`k_u^2 = k_z^2`::
+
+        aw(x, y) = aw [1 + (kx_g x^2 + ky_g y^2) kz^2 / 2 + ...]
+
+    so a ``cosh`` (focusing) dependence maps to a positive Genesis
+    coefficient and a ``cos`` (defocusing) dependence to a negative one.
+    In every form Maxwell forces ``kx_g + ky_g == 1``.
+
+    Returns
+    -------
+    b_max : float
+        Peak on-axis (x=y=0) vertical field, including `field_scale` and the
+        map's `master_parameter`.
+    kx_g : float
+        Genesis4 `kx`.
+    ky_g : float
+        Genesis4 `ky`.
+    """
+    kz0 = 2 * pi / lambdau
+
+    base = tao.ele_cartesian_map(ele_id, 1, "base")
+    terms = _cartesian_map_terms(tao, ele_id)
+
+    if len(terms) != 1:
+        raise NotImplementedError(
+            f"wiggler '{label}': cartesian_map with {len(terms)} terms; "
+            "only a single-term (ideal) map is supported"
+        )
+    term = terms[0]
+
+    if term["family"] != "y":
+        raise NotImplementedError(
+            f"wiggler '{label}': cartesian_map family '{term['family']}'; "
+            "only family 'y' (vertical field, horizontal deflection) is supported"
+        )
+    for key in ("x0", "y0", "phi_z"):
+        if term[key] != 0:
+            raise NotImplementedError(f"wiggler '{label}': cartesian_map {key} != 0")
+    if not np.isclose(term["kz"], kz0):
+        raise ValueError(
+            f"wiggler '{label}': cartesian_map kz {term['kz']} is inconsistent "
+            f"with l_period {lambdau} (kz = {kz0})"
+        )
+
+    scale = base["field_scale"]
+    master = base["master_parameter"]
+    if master and master.upper() not in ("NONE",):
+        scale *= tao.ele_gen_attribs(ele_id)[master.upper()]
+
+    form = term["form"]
+    if form == "hyper_y":
+        # cos(kx x) cosh(ky y): horizontally defocusing
+        b_max = term["coef"] * scale
+        kx_g = -((term["kx"] / kz0) ** 2)
+    elif form == "hyper_xy":
+        # cosh(kx x) cosh(ky y): focusing in both planes
+        b_max = term["coef"] * scale * term["ky"] / term["kz"]
+        kx_g = (term["kx"] / kz0) ** 2
+    elif form == "hyper_x":
+        # cosh(kx x) cos(ky y): vertically defocusing
+        b_max = term["coef"] * scale * term["ky"] / term["kx"]
+        kx_g = (term["kx"] / kz0) ** 2
+    else:
+        raise NotImplementedError(f"wiggler '{label}': cartesian_map form '{form}'")
+
+    return abs(b_max), kx_g, 1.0 - kx_g
+
+
 def genesis4_eles_from_tao_ele(tao, ele_id):
     """
     Creates Genesis4 elements from a specified element in a pytao.Tao instance.
@@ -205,24 +329,51 @@ def genesis4_eles_from_tao_ele(tao, ele_id):
         if y_offset != 0:
             raise NotImplementedError(f"y_offset not zero: {y_offset}")
 
-        # aw calc
-        B0 = B0 = info["B_MAX"]
         lambdau = info["L_PERIOD"]
-        K = B0 * lambdau * c / (2 * pi * mec2)
         nwig = int(info["N_PERIOD"])
-        lambdau = info["L_PERIOD"]
         if not np.isclose(L, nwig * lambdau):
             raise ValueError(
                 f"Inconsistent length for undulator {label}: {L} != {nwig}*{lambdau}"
             )
+        kz = 2 * pi / lambdau
 
-        if "helical" in info["field_calc"].lower():
+        field_calc = info["field_calc"].lower()
+
+        # Transverse field roll-off -> Genesis4 kx, ky (normalized to ku**2,
+        # kx + ky == 1). Defaults are the Genesis4 defaults: no horizontal
+        # dependence, natural vertical focusing only.
+        kx_g, ky_g = 0.0, 1.0
+        helical = False
+
+        if field_calc == "fieldmap":
+            n_cart = info.get("num#cartesian_map", 0)
+            if n_cart != 1:
+                raise NotImplementedError(
+                    f"wiggler '{label}': field_calc is FieldMap with "
+                    f"{n_cart} cartesian_map(s) (and possibly cylindrical_map/grid_field); "
+                    "only a single cartesian_map is supported"
+                )
+            B0, kx_g, ky_g = undulator_field_params_from_cartesian_map(
+                tao, ele_id, label, lambdau
+            )
+        elif "helical" in field_calc:
             helical = True
-            aw = K
+            B0 = info["B_MAX"]
         else:
-            assert info["field_calc"].lower() == "planar_model"
-            aw = K / sqrt(2)
-            helical = False
+            assert field_calc == "planar_model", (
+                f"wiggler '{label}': unsupported field_calc '{info['field_calc']}'"
+            )
+            B0 = info["B_MAX"]
+            # Bmad planar_model is the hyper_y Cartesian form
+            #   B_y = B_max cos(KX x) cosh(KY y) cos(kz z),  KY**2 = KX**2 + kz**2
+            # i.e. horizontally *defocusing* for any nonzero KX.
+            KX = info.get("KX", 0.0)
+            if KX != 0:
+                kx_g = -((KX / kz) ** 2)
+                ky_g = 1.0 - kx_g
+
+        K = B0 * lambdau * c / (2 * pi * mec2)
+        aw = K if helical else K / sqrt(2)
 
         ele = Undulator(
             nwig=nwig,
@@ -231,6 +382,11 @@ def genesis4_eles_from_tao_ele(tao, ele_id):
             helical=helical,
             label=label,
         )
+        # Only set kx/ky when they differ from the Genesis4 defaults, so that
+        # ordinary planar undulators produce exactly the same lattice as before.
+        if not (kx_g == 0.0 and ky_g == 1.0):
+            ele.kx = kx_g
+            ele.ky = ky_g
         eles = [ele]
     else:
         raise NotImplementedError(f"{label}: {key} with {L=}")
