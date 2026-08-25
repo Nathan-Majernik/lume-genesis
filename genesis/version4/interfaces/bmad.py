@@ -6,6 +6,8 @@ from beamphysics.units import mec2
 from scipy.constants import c
 
 from math import pi, sqrt
+import logging
+
 import numpy as np
 
 
@@ -99,8 +101,10 @@ def _cartesian_map_terms(tao, ele_id, ix_map: int = 1, which: str = "model"):
     """
     Returns the terms of a Bmad cartesian_map as a list of dicts.
 
-    This bypasses `tao.ele_cartesian_map(..., 'terms')`, whose output parser
-    cannot handle the mixed numeric/string rows.
+    pytao has no dedicated parser for `ele_cartesian_map(..., 'terms')`, and its
+    generic one cannot handle the mixed numeric/string rows (pytao 1.2.2). The
+    call is therefore made with `raises=False`, which returns the raw output
+    lines, and those are parsed here.
 
     Each term dict has keys:
         coef, kx, ky, kz, x0, y0, phi_z, family, form
@@ -108,9 +112,26 @@ def _cartesian_map_terms(tao, ele_id, ix_map: int = 1, which: str = "model"):
     `family` is one of 'x', 'y', 'qu', 'sq' and `form` is one of
     'hyper_y', 'hyper_xy', 'hyper_x' (lowercased).
     """
-    lines = tao.cmd(f"pipe ele:cartesian_map {ele_id}|{which} {ix_map} terms")
+    # pytao logs the parse failure with a traceback before falling back to the
+    # raw lines. That fallback is what we want here, so keep it quiet.
+    pytao_log = logging.getLogger("pytao.core")
+    log_level = pytao_log.level
+    pytao_log.setLevel(logging.CRITICAL)
+    try:
+        lines = tao.ele_cartesian_map(
+            ele_id, ix_map, "terms", which=which, raises=False
+        )
+    finally:
+        pytao_log.setLevel(log_level)
+
     terms = []
     for line in lines:
+        if not isinstance(line, str):
+            # pytao learned to parse these rows; use its output directly instead.
+            raise NotImplementedError(
+                f"pytao returned parsed cartesian_map terms ({type(line).__name__}); "
+                "_cartesian_map_terms needs updating"
+            )
         p = line.split(";")
         terms.append(
             {
