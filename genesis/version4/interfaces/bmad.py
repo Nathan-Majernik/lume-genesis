@@ -136,7 +136,7 @@ def genesis4_eles_from_tao_ele(tao, ele_id):
     x_offset = info.get("X_OFFSET", 0)
     y_offset = info.get("Y_OFFSET", 0)
 
-    # Genesis4 elements are axis-aligned; a tilt would silently be dropped.
+    # Genesis4 does not support rotation; a tilt is silently dropped
     tilt = info.get("TILT", 0)
     if tilt != 0:
         raise NotImplementedError(
